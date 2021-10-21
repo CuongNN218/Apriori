@@ -1,0 +1,24 @@
+This is the instruction for running this code:
+
+Requirements:
+
+python>=3.7
+numpy
+matplotlib
+
+To install required packages, run the command below:
+
+pip install -r requirements.txt
+
+To generate rules using the Apriori algorithm, run the command below:
+
+python3 hcrules.py --min_sup min1 min2 min3 \
+                    --min_conf minimum_confidence \
+                    --input_file /path/to/your/input/file \
+                    --output_file /path/to/your/output/file
+
+where:
+--min_sup: a integer number that is the minimum support count
+--min_conf: a float number that is the minimum confidence of strong rule
+--input_file: path to your input transaction
+--output_file: path to your output file
