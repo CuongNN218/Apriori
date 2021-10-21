@@ -42,7 +42,7 @@ def generate_itemsets(previous_itemsets, k):
 
 
 def get_subset(candidates, transaction, freq_dict):
-    # print(transaction)
+
     sub_candidates = []
     for rule in candidates:
         if set(rule) <= set(transaction):
@@ -50,7 +50,6 @@ def get_subset(candidates, transaction, freq_dict):
             if tuple(rule) not in freq_dict.keys():
                 freq_dict[tuple(rule)] = 0
             freq_dict[tuple(rule)] += 1
-    # print(freq_dict)
     return sub_candidates
 
 
@@ -68,16 +67,12 @@ def prune_itemsets(freq_dict, min_sup, all_freq):
 def generate_l1(items_freq, min_sup):
     # transaction should be dict, key: id, val: list items
     # generate 1- itemsets from input file
-    items_freq = dict(sorted(items_freq.items(), key=lambda item: item[0]))
-    # convert to list
-    items_freq = np.array([v for k, v in items_freq.items()])
-    # assign all items below the min sup is 0, above is 1
-    mask_item = (items_freq >= min_sup).astype(int)
-    masked_items = items_freq * mask_item
-    items_1 = (np.where(masked_items != 0)[0] + 1).tolist()
-    # each element of set should be a list
-    # l1 = set(map(list, l1))
-    l1 = [[x] for x in items_1]
+    items = []
+    for k, v in items_freq.items():
+        if v >= min_sup:
+            items.append(k)
+    items = sorted(items)
+    l1 = [[x] for x in items]
     return l1
 
 
@@ -133,24 +128,26 @@ def apiori(trans, items_freq, min_sup):
 
     start = time.time()
     l1 = generate_l1(items_freq, min_sup)
-    # print(l1[:100])
-    # exit()
     previous_itemset = l1
     frequent_itemset = [l1]
+    print("Length of 1 freq itemset: ", len(l1))
     k = 1
     all_itemsets_freq_dict = OrderedDict()
     while len(previous_itemset) > 0:
         candidates = generate_itemsets(previous_itemset, k)
         subset_freq = OrderedDict()
+
         for tran_id, val in trans.items():
             sub_candidates = get_subset(candidates, val, subset_freq)
-        # print(f"Sub_set counting {k}:", subset_freq)
+
         pruned_itemset = prune_itemsets(subset_freq, min_sup, all_itemsets_freq_dict)
         pruned_itemset = sorted(pruned_itemset)
         if len(pruned_itemset) > 0:
             frequent_itemset.append(pruned_itemset)
         previous_itemset = pruned_itemset
         print(f'Num of {k+1} freq set: {len(pruned_itemset)}')
+        # if k == 3:
+        #     print(pruned_itemset)
         k += 1
     p_time = round(time.time() - start, 2)
     return frequent_itemset, all_itemsets_freq_dict, items_freq, p_time
@@ -254,7 +251,6 @@ def post_processing(generated_rules, output_file, min_conf):
                 lhs = ','.join(str_rule)
             else:
                 lhs = str(rule[0][0])
-            # key = tuple(rule[0])
             line = f'{lhs}|{{}}|{rule[2]}|-1\n'
             f.write(line)
     f.close()
@@ -313,6 +309,17 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     trans, items_freq = preprocessing(args.input_file)
+    # check_set = set()
+    # check_set.add(435)
+    # check_set.add(436)
+    # count_1 = []
+    # for k, v in trans.items():
+    #     if check_set.issubset(set(v)):
+    #         count_1.append(k)
+    # print("Len of tran ids", len(count_1))
+    # print("Trans ids", count_1)
+    # exit()
+
     os.makedirs(args.output_file, exist_ok=True)
 
     count_freq_set_list = []
@@ -320,10 +327,19 @@ if __name__ == '__main__':
     count_rule_list = []
     time_rule_list = []
     for min_sup in args.min_sup:
-        print(min_sup)
+        print("Generating rules for: ", min_sup)
         freq_itemset, freq_itemset_count, one_itemset_count, p_time_itemset = apiori(trans,
                                                                                      items_freq,
                                                                                      min_sup)
+        test = open('test_code_2.txt', 'w')
+
+        for item in freq_itemset[1]:
+            item_set = ','.join(list(map(str, item)))
+            count = freq_itemset_count[tuple(item)]
+            line = f'{item_set}\t{count}\n'
+            test.write(line)
+
+        # exit()
         count_freq_set = 0
         for level in freq_itemset:
             count_freq_set += len(level)
@@ -338,7 +354,6 @@ if __name__ == '__main__':
         post_processing(rules,
                         os.path.join(args.output_file, f'rule_ms_{min_sup}_mc_{args.min_conf}'),
                         args.min_conf)
-
     # plot time need to generate frequent sets and rules
     plot_bar_chart(time_freq_list,
                    time_rule_list,
@@ -346,7 +361,8 @@ if __name__ == '__main__':
                    'Rule',
                    f'Processing time to generate rule and frequent set with min conf: {args.min_conf}',
                    "Time (s)",
-                   os.path.join(args.output_file, f'time_mc_{args.min_conf}.png'))
+                   os.path.join(args.output_file, f'time_mc_{args.min_conf}.png'),
+                   args)
 
     # plot number of frequent sets and rules
 
@@ -356,7 +372,8 @@ if __name__ == '__main__':
                    'Rule',
                    f'Number of frequent sets and rules with min conf: {args.min_conf}',
                    'Counting',
-                   os.path.join(args.output_file, f'Counting_mc_{args.min_conf}.png'))
+                   os.path.join(args.output_file, f'Counting_mc_{args.min_conf}.png'),
+                   args)
 
 
 
