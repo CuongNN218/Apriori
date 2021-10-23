@@ -169,7 +169,6 @@ def ap_genrules(f_k, h_prev, min_conf, all_freq, one_item_freq, rules):
         curr_set = set()
         remove_set = set()
         for itemset in h_next:
-            # print(f'h_m+1: {itemset}')
             curr_set.add(tuple(itemset))
             set_k = set(f_k)
             curr_consequence = set(itemset)
@@ -187,7 +186,6 @@ def ap_genrules(f_k, h_prev, min_conf, all_freq, one_item_freq, rules):
                               sorted(curr_consequence),
                               all_freq[tuple(sorted_set_k)],
                               round(conf, 3)])
-                # print(f"Rules: {remain_set} -> {curr_consequence}\tConf: {conf}")
             else:
                 # print(f'del: {itemset}')
                 remove_set.add(tuple(itemset))
@@ -211,16 +209,12 @@ def post_processing(generated_rules, output_file, min_conf):
                 rhs = ','.join(str_rule)
             else:
                 rhs = str(rule[1][0])
-            # line = f'{lhs}|{rhs}|{rule[2]}|{rule[3]}\n'
             line = '{' + lhs + '}|{' + rhs + '}|' + str(rule[2]) + f'|{rule[3]}\n'
             f.write(line)
     else:
         for rule in generated_rules:
-            # print("rule: ", rule)
             str_rule = map(str, rule[0])
             lhs = ','.join(str_rule)
-            # print(lhs)
-            # line = f'{lhs}|{{}}|{rule[2]}|-1\n'
             line = '{' + lhs + '}|{}|' + str(rule[2]) + '|-1\n'
             f.write(line)
     f.close()
@@ -293,21 +287,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     trans, items_freq = preprocessing(args.input_file)
-    # tu_so_set = set([230, 1])
-    # count_tu_so = []
-    # mau_so_set = set([230])
-    # count_mau_so = []
-    # for k, v in trans.items():
-    #     if tu_so_set.issubset(set(v)):
-    #         count_tu_so.append(k)
-    #     if mau_so_set.issubset(set(v)):
-    #         count_mau_so.append(k)
-    #
-    # print(f"Count XY - {tu_so_set}: {len(count_tu_so)}")
-    # # print("Trans ids", count_tu_so)
-    # print(f"Count X - {mau_so_set}: {len(count_mau_so)}")
-    # print("Confidence: ", len(count_tu_so) / len(count_mau_so))
-    # exit()
 
     os.makedirs(args.output_file, exist_ok=True)
 
@@ -320,17 +299,8 @@ if __name__ == '__main__':
         freq_itemset, freq_itemset_count, one_itemset_count, p_time_itemset = apiori(trans,
                                                                                      items_freq,
                                                                                      min_sup)
-        # test = open('test_code_2.txt', 'w')
-        #
-        # for item in freq_itemset[1]:
-        #     item_set = ','.join(list(map(str, item)))
-        #     count = freq_itemset_count[tuple(item)]
-        #     line = f'{item_set}\t{count}\n'
-        #     test.write(line)
-
-        # exit()
         count_freq_set = 0
-        for level in freq_itemset[1:]:
+        for level in freq_itemset:
             count_freq_set += len(level)
         count_freq_set_list.append(count_freq_set)
         time_freq_list.append(p_time_itemset)
@@ -344,8 +314,6 @@ if __name__ == '__main__':
                         os.path.join(args.output_file, f'rule_ms_{min_sup}_mc_{args.min_conf}.txt'),
                         args.min_conf)
     # plot time need to generate frequent sets and rules
-    # time_rule_list *= 100
-    # print(time_rule_list)
     plot_bar_chart(time_freq_list,
                    time_rule_list,
                    f'Processing time to generate rule and frequent set with min conf: {args.min_conf}',
