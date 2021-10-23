@@ -1,16 +1,21 @@
 import copy
 import os
-
 import numpy as np
 import argparse
-from collections import OrderedDict
 import matplotlib.pyplot as plt
 import time
+from collections import OrderedDict
 
 
-def calculate_confidence():
-    confidence = 0
-    return confidence
+def calculate_confidence(freq_set, consequence, all_freq):
+    remain_set = set(freq_set) - set(consequence)
+    if len(remain_set) == 1:
+        b = all_freq[tuple(remain_set)]
+    else:
+        sorted_remain_set = sorted(list(remain_set))
+        b = all_freq[tuple(sorted_remain_set)]
+    conf = all_freq[tuple(freq_set)] / b
+    return conf, remain_set
 
 
 def generate_itemsets(previous_itemsets, k):
@@ -42,25 +47,20 @@ def generate_itemsets(previous_itemsets, k):
 
 
 def get_subset(candidates, transaction, freq_dict):
-
     sub_candidates = []
     for rule in candidates:
         if set(rule) <= set(transaction):
             sub_candidates.append(candidates)
-            if tuple(rule) not in freq_dict.keys():
-                freq_dict[tuple(rule)] = 0
-            freq_dict[tuple(rule)] += 1
+            freq_dict[tuple(rule)] = freq_dict.get(tuple(rule), 0) + 1
     return sub_candidates
 
 
-def prune_itemsets(freq_dict, min_sup, all_freq):
-
+def prune_itemsets(freq_dict, min_support, all_freq):
     pruned_itemset = set()
     for k, v in freq_dict.items():
-        if v >= min_sup:
+        if v >= min_support:
             pruned_itemset.add(k)
             all_freq[k] = v
-
     return list(map(list, pruned_itemset))
 
 
@@ -90,19 +90,18 @@ def preprocessing(input_file):
             trans[int(tran_id)].append(int(item_id))
     return trans, items_freq
 
-def apiori(trans, items_freq, min_sup):
 
+def apiori(trans, items_freq, min_sup):
     start = time.time()
     l1 = generate_l1(items_freq, min_sup)
     previous_itemset = l1
     frequent_itemset = [l1]
-    print("Length of 1 freq itemset: ", len(l1))
+    print("Num of 1 freq itemset: ", len(l1))
     k = 1
     all_itemsets_freq_dict = OrderedDict()
     while len(previous_itemset) > 0:
         candidates = generate_itemsets(previous_itemset, k)
-        subset_freq = OrderedDict()
-
+        subset_freq = {}
         for tran_id, val in trans.items():
             sub_candidates = get_subset(candidates, val, subset_freq)
 
@@ -112,54 +111,39 @@ def apiori(trans, items_freq, min_sup):
             frequent_itemset.append(pruned_itemset)
         previous_itemset = pruned_itemset
         print(f'Num of {k+1} freq set: {len(pruned_itemset)}')
-        # if k == 3:
-        #     print(pruned_itemset)
         k += 1
     p_time = round(time.time() - start, 2)
-    return frequent_itemset, all_itemsets_freq_dict, items_freq, p_time
+    for k, v in items_freq.items():
+        if [k] in l1:
+            all_itemsets_freq_dict[tuple([k])] = v
+    return frequent_itemset, all_itemsets_freq_dict, p_time
 
 
-def generation_rules(all_freq_itemset, all_freq, one_item_freq, min_conf):
+def generation_rules(all_freq_itemset, all_freq, min_conf):
     rules = []
     start = time.time()
     if min_conf == -1:
         for k_itemset in all_freq_itemset[1:]:
             for f_k in k_itemset:
                 rules.append([sorted(f_k), [], all_freq[tuple(f_k)], -1])
-                print(rules)
         p_time = time.time() - start
         return rules, p_time
 
     for k_itemsets in all_freq_itemset[1:]:
-        # print("k-itemsets:", len(k_itemsets), k_itemsets)
         for f_k in k_itemsets:
             h_1 = [[x] for x in f_k]
             for x in f_k:
-                set_fk = set(f_k)
-                remain_set = set_fk - set([x])
-                if len(remain_set) == 1:
-                    b = one_item_freq[list(remain_set)[0]]
-                else:
-                    sorted_remain_set = sorted(list(remain_set))
-                    b = all_freq[tuple(sorted_remain_set)]
-                sorted_set_k = sorted(list(set_fk))
-                conf = all_freq[tuple(sorted_set_k)] / b
+                conf, lhs = calculate_confidence(f_k, [x], all_freq)
                 if conf >= min_conf:
-                    rules.append([sorted(remain_set), [x], all_freq[tuple(sorted_set_k)], round(conf, 3)])
-                    # print(f"Rules: {remain_set} -> {x}\tConf: {conf}")
-            ap_genrules(f_k, h_1, min_conf, all_freq, one_item_freq, rules)
-            # break
-        # break
+                    rules.append([sorted(lhs), [x], all_freq[tuple(f_k)], round(conf, 3)])
+            ap_genrules(f_k, h_1, min_conf, all_freq, rules)
+
     p_time = round(100 * (time.time() - start), 3)
-    print(p_time)
     print(f'Nums of rules: {len(rules)}')
-    # print(rules)
     return rules, p_time
 
 
-def ap_genrules(f_k, h_prev, min_conf, all_freq, one_item_freq, rules):
-    # rules is a dict: key: LHS, Val: RHS:
-
+def ap_genrules(f_k, h_prev, min_conf, all_freq, rules):
     if len(h_prev) == 0:
         return
     k = len(f_k)
@@ -170,29 +154,14 @@ def ap_genrules(f_k, h_prev, min_conf, all_freq, one_item_freq, rules):
         remove_set = set()
         for itemset in h_next:
             curr_set.add(tuple(itemset))
-            set_k = set(f_k)
-            curr_consequence = set(itemset)
-            remain_set = set_k - curr_consequence
-            if len(remain_set) == 1:
-                b = one_item_freq[list(remain_set)[0]]
-            else:
-                sorted_remain_set = sorted(list(remain_set))
-                b = all_freq[tuple(sorted_remain_set)]
-            sorted_set_k = sorted(list(set_k))
-            conf = all_freq[tuple(sorted_set_k)] / b
-
+            conf, lhs = calculate_confidence(f_k, itemset, all_freq)
             if conf >= min_conf:
-                rules.append([sorted(remain_set),
-                              sorted(curr_consequence),
-                              all_freq[tuple(sorted_set_k)],
-                              round(conf, 3)])
+                rules.append([sorted(lhs), itemset, all_freq[tuple(f_k)], round(conf, 3)])
             else:
-                # print(f'del: {itemset}')
                 remove_set.add(tuple(itemset))
         h_remain = curr_set - remove_set
         h_remain = list(map(list, h_remain))
-        # print("H remain: ", h_remain)
-        ap_genrules(f_k, h_remain, min_conf, all_freq, one_item_freq, rules)
+        ap_genrules(f_k, h_remain, min_conf, all_freq, rules)
 
 
 def post_processing(generated_rules, output_file, min_conf):
@@ -271,10 +240,8 @@ def plot_bar_chart(val_1, val_2, plot_title, y_title, fig_name, args):
     plt.title(plot_title)
     plt.xticks(index + bar_width / 2, categories)
     plt.legend([rects1, rects2], ['Frequent Itemset', 'Rule'])
-    # plt.legend()
     plt.tight_layout()
     plt.savefig(fig_name)
-    # plt.show()
 
 
 # Press the green button in the gutter to run the script.
@@ -296,16 +263,14 @@ if __name__ == '__main__':
     time_rule_list = []
     for min_sup in args.min_sup:
         print("Generating rules for: ", min_sup)
-        freq_itemset, freq_itemset_count, one_itemset_count, p_time_itemset = apiori(trans,
-                                                                                     items_freq,
-                                                                                     min_sup)
+        freq_itemset, freq_itemset_count, p_time_itemset = apiori(trans, items_freq, min_sup)
         count_freq_set = 0
         for level in freq_itemset:
             count_freq_set += len(level)
         count_freq_set_list.append(count_freq_set)
         time_freq_list.append(p_time_itemset)
 
-        rules, p_time_rules = generation_rules(freq_itemset, freq_itemset_count, one_itemset_count, args.min_conf)
+        rules, p_time_rules = generation_rules(freq_itemset, freq_itemset_count, args.min_conf)
         count_rules = len(rules)
         count_rule_list.append(count_rules)
         time_rule_list.append(p_time_rules)
