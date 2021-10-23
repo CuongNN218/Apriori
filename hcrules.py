@@ -90,40 +90,6 @@ def preprocessing(input_file):
             trans[int(tran_id)].append(int(item_id))
     return trans, items_freq
 
-
-def pre_2():
-    items_dict = {
-        'BISCUIT': 1,
-        'BOURNVITA': 2,
-        'BREAD': 3,
-        'COCK': 4,
-        'COFFEE': 5,
-        'CORNFLAKES': 6,
-        'JAM': 7,
-        'MAGGI': 8,
-        'MILK': 9,
-        'SUGER': 10,
-        'TEA': 11
-    }
-    set_items = set()
-    import csv
-    trans = {}
-    items_freq = {}
-    with open('GroceryStoreDataSet.csv') as csv_file:
-        csv_reader = csv.reader(csv_file, delimiter=',')
-        idx = 1
-        for row in csv_reader:
-            items = row[0].split(',')
-            trans[idx] = []
-            for item in items:
-                set_items.add(item)
-                trans[idx].append(items_dict[item])
-                items_freq[items_dict[item]] = items_freq.get(items_dict[item], 0) + 1
-            trans[idx] = sorted(trans[idx])
-            idx += 1
-        items_freq = dict(sorted(items_freq.items(), key=lambda t: t[0]))
-    return trans, items_freq
-
 def apiori(trans, items_freq, min_sup):
 
     start = time.time()
@@ -158,7 +124,9 @@ def generation_rules(all_freq_itemset, all_freq, one_item_freq, min_conf):
     start = time.time()
     if min_conf == -1:
         for k_itemset in all_freq_itemset[1:]:
-            rules.append([sorted(k_itemset), [], -1])
+            for f_k in k_itemset:
+                rules.append([sorted(f_k), [], all_freq[tuple(f_k)], -1])
+                print(rules)
         p_time = time.time() - start
         return rules, p_time
 
@@ -182,7 +150,8 @@ def generation_rules(all_freq_itemset, all_freq, one_item_freq, min_conf):
             ap_genrules(f_k, h_1, min_conf, all_freq, one_item_freq, rules)
             # break
         # break
-    p_time = round(time.time() - start, 2)
+    p_time = round(100 * (time.time() - start), 3)
+    print(p_time)
     print(f'Nums of rules: {len(rules)}')
     # print(rules)
     return rules, p_time
@@ -242,40 +211,47 @@ def post_processing(generated_rules, output_file, min_conf):
                 rhs = ','.join(str_rule)
             else:
                 rhs = str(rule[1][0])
-            line = f'{lhs}|{rhs}|{rule[2]}|{rule[3]}\n'
+            # line = f'{lhs}|{rhs}|{rule[2]}|{rule[3]}\n'
+            line = '{' + lhs + '}|{' + rhs + '}|' + str(rule[2]) + f'|{rule[3]}\n'
             f.write(line)
     else:
         for rule in generated_rules:
-            if len(rule[0]) > 1:
-                str_rule = map(str, rule[0])
-                lhs = ','.join(str_rule)
-            else:
-                lhs = str(rule[0][0])
-            line = f'{lhs}|{{}}|{rule[2]}|-1\n'
+            # print("rule: ", rule)
+            str_rule = map(str, rule[0])
+            lhs = ','.join(str_rule)
+            # print(lhs)
+            # line = f'{lhs}|{{}}|{rule[2]}|-1\n'
+            line = '{' + lhs + '}|{}|' + str(rule[2]) + '|-1\n'
             f.write(line)
     f.close()
 
 
-def plot_bar_chart(val_1, val_2, label_val_1, label_val_2, plot_title, y_title, fig_name, args):
+def plot_bar_chart(val_1, val_2, plot_title, y_title, fig_name, args):
     n_groups = len(val_1)
-    fig, ax = plt.subplots()
+    fig, ax_1 = plt.subplots()
     index = np.arange(n_groups)
-    bar_width = 0.35
+    bar_width = 0.45
     opacity = 0.8
+    ax_2 = ax_1.twinx()
+    color_1 = 'tab:red'
+    color_2 = 'tab:blue'
+    rects1 = ax_1.bar(index,
+                      val_1,
+                      bar_width,
+                      alpha=opacity,
+                      color=color_1,
+                      label='Frequent_Itemset')
 
-    rects1 = plt.bar(index, val_1, bar_width,
-                     alpha=opacity,
-                     color='b',
-                     label=label_val_1)
-
-    rects2 = plt.bar(index + bar_width, val_2, bar_width,
-                     alpha=opacity,
-                     color='g',
-                     label=label_val_2)
+    rects2 = ax_2.bar(index + bar_width,
+                      val_2,
+                      bar_width,
+                      alpha=opacity,
+                      color=color_2,
+                      label='Rule')
 
     categories = tuple(args.min_sup)
 
-    def autolabel(rects, values, d_type=0):
+    def autolabel(rects, values, ax):
         """
         Attach a text label above each bar displaying its height
         """
@@ -287,10 +263,17 @@ def plot_bar_chart(val_1, val_2, label_val_1, label_val_2, plot_title, y_title, 
                     ha='center',
                     va='bottom')
 
-    autolabel(rects1, val_1)
-    autolabel(rects2, val_2)
-    plt.xlabel('Minimum Support Counting')
-    plt.ylabel(y_title)
+    autolabel(rects1, val_1, ax_1)
+    autolabel(rects2, val_2, ax_2)
+    ax_1.set_xlabel('Minimum Support Counting')
+    if 'time' in y_title.lower():
+        y_title_1 = 'time of frequent itemset generation (s)'
+        y_title_2 = 'time of rule generation (ms)'
+        ax_1.set_ylabel(y_title_1).set_color(color_1)
+        ax_2.set_ylabel(y_title_2).set_color(color_2)
+    else:
+        ax_1.set_ylabel(y_title + ' of frequent itemsets').set_color(color_1)
+        ax_2.set_ylabel(y_title + ' of rules').set_color(color_2)
     plt.title(plot_title)
     plt.xticks(index + bar_width, categories)
     plt.legend()
@@ -309,15 +292,20 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     trans, items_freq = preprocessing(args.input_file)
-    # check_set = set()
-    # check_set.add(435)
-    # check_set.add(436)
-    # count_1 = []
+    # tu_so_set = set([230, 1])
+    # count_tu_so = []
+    # mau_so_set = set([230])
+    # count_mau_so = []
     # for k, v in trans.items():
-    #     if check_set.issubset(set(v)):
-    #         count_1.append(k)
-    # print("Len of tran ids", len(count_1))
-    # print("Trans ids", count_1)
+    #     if tu_so_set.issubset(set(v)):
+    #         count_tu_so.append(k)
+    #     if mau_so_set.issubset(set(v)):
+    #         count_mau_so.append(k)
+    #
+    # print(f"Count XY - {tu_so_set}: {len(count_tu_so)}")
+    # # print("Trans ids", count_tu_so)
+    # print(f"Count X - {mau_so_set}: {len(count_mau_so)}")
+    # print("Confidence: ", len(count_tu_so) / len(count_mau_so))
     # exit()
 
     os.makedirs(args.output_file, exist_ok=True)
@@ -331,17 +319,17 @@ if __name__ == '__main__':
         freq_itemset, freq_itemset_count, one_itemset_count, p_time_itemset = apiori(trans,
                                                                                      items_freq,
                                                                                      min_sup)
-        test = open('test_code_2.txt', 'w')
-
-        for item in freq_itemset[1]:
-            item_set = ','.join(list(map(str, item)))
-            count = freq_itemset_count[tuple(item)]
-            line = f'{item_set}\t{count}\n'
-            test.write(line)
+        # test = open('test_code_2.txt', 'w')
+        #
+        # for item in freq_itemset[1]:
+        #     item_set = ','.join(list(map(str, item)))
+        #     count = freq_itemset_count[tuple(item)]
+        #     line = f'{item_set}\t{count}\n'
+        #     test.write(line)
 
         # exit()
         count_freq_set = 0
-        for level in freq_itemset:
+        for level in freq_itemset[1:]:
             count_freq_set += len(level)
         count_freq_set_list.append(count_freq_set)
         time_freq_list.append(p_time_itemset)
@@ -352,15 +340,15 @@ if __name__ == '__main__':
         time_rule_list.append(p_time_rules)
 
         post_processing(rules,
-                        os.path.join(args.output_file, f'rule_ms_{min_sup}_mc_{args.min_conf}'),
+                        os.path.join(args.output_file, f'rule_ms_{min_sup}_mc_{args.min_conf}.txt'),
                         args.min_conf)
     # plot time need to generate frequent sets and rules
+    # time_rule_list *= 100
+    # print(time_rule_list)
     plot_bar_chart(time_freq_list,
                    time_rule_list,
-                   'Frequent set',
-                   'Rule',
                    f'Processing time to generate rule and frequent set with min conf: {args.min_conf}',
-                   "Time (s)",
+                   "Time",
                    os.path.join(args.output_file, f'time_mc_{args.min_conf}.png'),
                    args)
 
@@ -368,10 +356,8 @@ if __name__ == '__main__':
 
     plot_bar_chart(count_freq_set_list,
                    count_rule_list,
-                   'Frequent set',
-                   'Rule',
                    f'Number of frequent sets and rules with min conf: {args.min_conf}',
-                   'Counting',
+                   'The number',
                    os.path.join(args.output_file, f'Counting_mc_{args.min_conf}.png'),
                    args)
 
