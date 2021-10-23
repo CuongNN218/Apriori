@@ -232,22 +232,20 @@ def plot_bar_chart(val_1, val_2, plot_title, y_title, fig_name, args):
     index = np.arange(n_groups)
     bar_width = 0.45
     opacity = 0.8
-    ax_2 = ax_1.twinx()
+
     color_1 = 'tab:red'
     color_2 = 'tab:blue'
     rects1 = ax_1.bar(index,
                       val_1,
                       bar_width,
                       alpha=opacity,
-                      color=color_1,
-                      label='Frequent_Itemset')
-
+                      color=color_1)
+    ax_2 = ax_1.twinx()
     rects2 = ax_2.bar(index + bar_width,
                       val_2,
                       bar_width,
                       alpha=opacity,
-                      color=color_2,
-                      label='Rule')
+                      color=color_2)
 
     categories = tuple(args.min_sup)
 
@@ -274,9 +272,12 @@ def plot_bar_chart(val_1, val_2, plot_title, y_title, fig_name, args):
     else:
         ax_1.set_ylabel(y_title + ' of frequent itemsets').set_color(color_1)
         ax_2.set_ylabel(y_title + ' of rules').set_color(color_2)
+    ax_1.set_ylim([0, max(val_1) * 1.1])
+    ax_2.set_ylim([0, max(val_2) * 1.2])
     plt.title(plot_title)
-    plt.xticks(index + bar_width, categories)
-    plt.legend()
+    plt.xticks(index + bar_width / 2, categories)
+    plt.legend([rects1, rects2], ['Frequent Itemset', 'Rule'])
+    # plt.legend()
     plt.tight_layout()
     plt.savefig(fig_name)
     # plt.show()
