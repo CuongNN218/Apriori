@@ -4,55 +4,40 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 import time
+import itertools
 from collections import OrderedDict
 
 
 def calculate_confidence(freq_set, consequence, all_freq):
-    remain_set = set(freq_set) - set(consequence)
-    if len(remain_set) == 1:
-        b = all_freq[tuple(remain_set)]
-    else:
-        sorted_remain_set = sorted(list(remain_set))
-        b = all_freq[tuple(sorted_remain_set)]
-    conf = all_freq[tuple(freq_set)] / b
+    remain_set = sorted(set(freq_set) - set(consequence))
+    conf = all_freq[tuple(freq_set)] / all_freq[tuple(remain_set)]
     return conf, remain_set
 
 
 def generate_itemsets(previous_itemsets, k):
     itemsets = []
+    prev_set = set([tuple(item) for item in previous_itemsets])
     for a in previous_itemsets:
         for b in previous_itemsets:
             if b == a:
                 continue
-            merged = []
-            if k == 1 and a[k - 1] < b[k - 1]:
-                merged = a + [b[k - 1]]
-                if sorted(merged) in itemsets:
+            if a[:k-1] == b[:k-1] and a[k-1] < b[k-1]:
+                merged = a + [b[k-1]]
+                if merged in itemsets:
                     continue
-            elif k >= 1:
-                if a[:k-1] == b[:k-1] and a[k-1] < b[k-1]:
-                    merged = a + [b[k-1]]
-                    if sorted(merged) in itemsets:
-                        continue
-            if len(merged) > 0:
-                check = True
-                for element in merged:
-                    sub_merge = copy.copy(merged)
-                    sub_merge.remove(element)
-                    if sub_merge not in previous_itemsets:
-                        check = False
-                if check:
-                    itemsets.append(sorted(merged))
+                # gen all combination from set:
+                tmp_set = set()
+                for comb in itertools.combinations(merged, k):
+                    tmp_set.add(comb)
+                if tmp_set <= prev_set:
+                    itemsets.append(merged)
     return itemsets
 
 
 def get_subset(candidates, transaction, freq_dict):
-    sub_candidates = []
     for rule in candidates:
         if set(rule) <= set(transaction):
-            sub_candidates.append(candidates)
             freq_dict[tuple(rule)] = freq_dict.get(tuple(rule), 0) + 1
-    return sub_candidates
 
 
 def prune_itemsets(freq_dict, min_support, all_freq):
@@ -67,12 +52,7 @@ def prune_itemsets(freq_dict, min_support, all_freq):
 def generate_l1(items_freq, min_sup):
     # transaction should be dict, key: id, val: list items
     # generate 1- itemsets from input file
-    items = []
-    for k, v in items_freq.items():
-        if v >= min_sup:
-            items.append(k)
-    items = sorted(items)
-    l1 = [[x] for x in items]
+    l1 = sorted([[k] for k, v in items_freq.items() if v >= min_sup])
     return l1
 
 
@@ -80,7 +60,6 @@ def preprocessing(input_file):
     # read input file return a dict of trans and dict of item's frequency.
     trans = {}
     items_freq = {}
-    i = 0
     with open(input_file, 'r') as f:
         for line in f:
             tran_id, item_id = line.strip().split(' ')[:2]
@@ -96,15 +75,14 @@ def apiori(trans, items_freq, min_sup):
     l1 = generate_l1(items_freq, min_sup)
     previous_itemset = l1
     frequent_itemset = [l1]
-    print("Num of 1 freq itemset: ", len(l1))
+    print("Num of 1 freq set: ", len(l1))
     k = 1
     all_itemsets_freq_dict = OrderedDict()
     while len(previous_itemset) > 0:
         candidates = generate_itemsets(previous_itemset, k)
         subset_freq = {}
         for tran_id, val in trans.items():
-            sub_candidates = get_subset(candidates, val, subset_freq)
-
+            get_subset(candidates, val, subset_freq)
         pruned_itemset = prune_itemsets(subset_freq, min_sup, all_itemsets_freq_dict)
         pruned_itemset = sorted(pruned_itemset)
         if len(pruned_itemset) > 0:
@@ -119,13 +97,13 @@ def apiori(trans, items_freq, min_sup):
     return frequent_itemset, all_itemsets_freq_dict, p_time
 
 
-def generation_rules(all_freq_itemset, all_freq, min_conf):
+def generation_rules(all_freq_itemset, all_freq, min_conf, n_trans):
     rules = []
     start = time.time()
     if min_conf == -1:
-        for k_itemset in all_freq_itemset[1:]:
+        for k_itemset in all_freq_itemset:
             for f_k in k_itemset:
-                rules.append([sorted(f_k), [], all_freq[tuple(f_k)], -1])
+                rules.append([f_k, [], round(all_freq[tuple(f_k)] / n_trans, 4), -1])
         p_time = time.time() - start
         return rules, p_time
 
@@ -135,58 +113,54 @@ def generation_rules(all_freq_itemset, all_freq, min_conf):
             for x in f_k:
                 conf, lhs = calculate_confidence(f_k, [x], all_freq)
                 if conf >= min_conf:
-                    rules.append([sorted(lhs), [x], all_freq[tuple(f_k)], round(conf, 3)])
-            ap_genrules(f_k, h_1, min_conf, all_freq, rules)
+                    rules.append([lhs, [x], round(all_freq[tuple(f_k)] / n_trans, 4), round(conf, 4)])
+            ap_genrules(f_k, h_1, min_conf, all_freq, rules, n_trans)
 
     p_time = round(100 * (time.time() - start), 3)
     print(f'Nums of rules: {len(rules)}')
     return rules, p_time
 
 
-def ap_genrules(f_k, h_prev, min_conf, all_freq, rules):
+def ap_genrules(f_k, h_prev, min_conf, all_freq, rules, n_trans):
     if len(h_prev) == 0:
         return
     k = len(f_k)
     m = len(h_prev[0])
     if k > m + 1:
         h_next = generate_itemsets(h_prev, m)
-        curr_set = set()
+        curr_set = set([tuple(h_i) for h_i in h_next ])
         remove_set = set()
-        for itemset in h_next:
-            curr_set.add(tuple(itemset))
-            conf, lhs = calculate_confidence(f_k, itemset, all_freq)
+        for h_i in h_next:
+            conf, lhs = calculate_confidence(f_k, h_i, all_freq)
             if conf >= min_conf:
-                rules.append([sorted(lhs), itemset, all_freq[tuple(f_k)], round(conf, 3)])
+                rules.append([lhs, h_i, round(all_freq[tuple(f_k)] / n_trans, 4), round(conf, 4)])
             else:
-                remove_set.add(tuple(itemset))
-        h_remain = curr_set - remove_set
-        h_remain = list(map(list, h_remain))
-        ap_genrules(f_k, h_remain, min_conf, all_freq, rules)
+                remove_set.add(tuple(h_i))
+        h_remain = list(map(list, curr_set - remove_set))
+        ap_genrules(f_k, h_remain, min_conf, all_freq, rules, n_trans)
+
+
+def rule2str(rule):
+    if len(rule) > 1:
+        str_rule = map(str, rule)
+        return ','.join(str_rule)
+    return str(rule[0])
 
 
 def post_processing(generated_rules, output_file, min_conf):
-    f = open(output_file, 'w')
-    if min_conf > 0:
-        for rule in generated_rules:
-            if len(rule[0]) > 1:
+    with open(output_file, 'w') as f:
+        if min_conf > 0:
+            for rule in generated_rules:
+                lhs = rule2str(rule[0])
+                rhs = rule2str(rule[1])
+                line = '{' + lhs + '}|{' + rhs + '}|' + str(rule[2]) + f'|{rule[3]}\n'
+                f.write(line)
+        else:
+            for rule in generated_rules:
                 str_rule = map(str, rule[0])
                 lhs = ','.join(str_rule)
-            else:
-                lhs = str(rule[0][0])
-            if len(rule[1]) > 1:
-                str_rule = map(str, rule[1])
-                rhs = ','.join(str_rule)
-            else:
-                rhs = str(rule[1][0])
-            line = '{' + lhs + '}|{' + rhs + '}|' + str(rule[2]) + f'|{rule[3]}\n'
-            f.write(line)
-    else:
-        for rule in generated_rules:
-            str_rule = map(str, rule[0])
-            lhs = ','.join(str_rule)
-            line = '{' + lhs + '}|{}|' + str(rule[2]) + '|-1\n'
-            f.write(line)
-    f.close()
+                line = '{' + lhs + '}|{}|' + str(rule[2]) + '|-1\n'
+                f.write(line)
 
 
 def plot_bar_chart(val_1, val_2, plot_title, y_title, fig_name, args):
@@ -254,7 +228,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     trans, items_freq = preprocessing(args.input_file)
-
+    num_trans = len(trans.keys())
     os.makedirs(args.output_file, exist_ok=True)
 
     count_freq_set_list = []
@@ -270,7 +244,7 @@ if __name__ == '__main__':
         count_freq_set_list.append(count_freq_set)
         time_freq_list.append(p_time_itemset)
 
-        rules, p_time_rules = generation_rules(freq_itemset, freq_itemset_count, args.min_conf)
+        rules, p_time_rules = generation_rules(freq_itemset, freq_itemset_count, args.min_conf, num_trans)
         count_rules = len(rules)
         count_rule_list.append(count_rules)
         time_rule_list.append(p_time_rules)
