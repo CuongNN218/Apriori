@@ -14,24 +14,17 @@ def calculate_confidence(freq_set, consequence, all_freq):
     return conf, remain_set
 
 
-def generate_itemsets(previous_itemsets, k):
-    itemsets = []
-    prev_set = set([tuple(item) for item in previous_itemsets])
-    for a in previous_itemsets:
-        for b in previous_itemsets:
-            if b == a:
-                continue
-            if a[:k-1] == b[:k-1] and a[k-1] < b[k-1]:
-                merged = a + [b[k-1]]
-                if merged in itemsets:
-                    continue
-                # gen all combination from set:
-                tmp_set = set()
-                for comb in itertools.combinations(merged, k):
-                    tmp_set.add(comb)
+def generate_itemsets(prev_sets, k):
+    itemsets = set()
+    prev_set = set([tuple(item) for item in prev_sets])
+    for i in range(len(prev_sets)):
+        for j in range(i + 1, len(prev_sets)):
+            if prev_sets[i][:k-1] == prev_sets[j][:k-1]:
+                merged = sorted(set(prev_sets[i]).union(set(prev_sets[j])))
+                tmp_set = set([comb for comb in itertools.combinations(merged, k)])
                 if tmp_set <= prev_set:
-                    itemsets.append(merged)
-    return itemsets
+                    itemsets.add(tuple(merged))
+    return list(map(list, itemsets))
 
 
 def get_subset(candidates, transaction, freq_dict):
